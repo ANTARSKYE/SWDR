@@ -1,0 +1,1035 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torch.optim.lr_scheduler as lr_scheduler
+from netCDF4 import Dataset
+from sklearn.model_selection import train_test_split
+import numpy as np
+from model2 import CloudAttenuationModel0
+from DNN_Model import CloudAttenuationModel2
+import netCDF4 as nc
+import pandas as pd
+import matplotlib.pyplot as plt
+import os
+import re
+from scipy.interpolate import RectBivariateSpline
+
+
+target_lat = 22.037000
+target_lon = 121.558300
+
+output_folder = r'E:'
+output_filename = 'nc'
+
+nearest_indices = None
+
+first_file_path = os.path.join(r'nc')
+
+if os.path.exists(first_file_path):
+    nc_file = Dataset(first_file_path, 'r')
+    lats = nc_file.variables['lat'][:]
+    lons = nc_file.variables['lon'][:]
+    # print("lat:",lats )
+    # print("lons:", lons )
+    lat_diff = lats - target_lat
+    lon_diff = lons - target_lon
+    distance_sq = lat_diff[:, np.newaxis] ** 2 + lon_diff[np.newaxis, :] ** 2
+    nearest_indices = np.unravel_index(distance_sq.argmin(), distance_sq.shape)
+    nc_file.close()
+else:
+    raise ValueError("The first file does not exist.")
+print("nearindices:",nearest_indices)
+
+# nearest_lat_index, nearest_lon_index = nearest_indices
+# nearest_lat = lats[nearest_lat_index]
+# nearest_lon = lons[nearest_lon_index]
+
+# print(nearest_indices)
+# print(nearest_lon)
+# print(nearest_lat)
+
+new_file_path = os.path.join(output_folder, output_filename)
+new_nc_file = Dataset(new_file_path, 'w', format='NETCDF4')
+new_nc_file.createDimension('time', None)
+new_time = new_nc_file.createVariable('time', 'i4', ('time',))
+new_cfr = new_nc_file.createVariable('CFR', 'f4', ('time',))
+new_clt = new_nc_file.createVariable('CLT', 'f4', ('time',))
+new_cth = new_nc_file.createVariable('CTH', 'f4', ('time',))
+new_ctp = new_nc_file.createVariable('CTP', 'f4', ('time',))
+new_ctt = new_nc_file.createVariable('CTT', 'f4', ('time',))
+new_eglob = new_nc_file.createVariable('Eglob', 'f4', ('time',))
+new_ebn = new_nc_file.createVariable('Ebn', 'f4', ('time',))
+new_edif = new_nc_file.createVariable('Edif', 'f4', ('time',))
+new_LPW_LOW = new_nc_file.createVariable('LPW_LOW', 'f4', ('time',))
+new_LPW_MID = new_nc_file.createVariable('LPW_MID', 'f4', ('time',))
+new_LPW_HIGH = new_nc_file.createVariable('LPW_HIGH', 'f4', ('time',))
+new_LST = new_nc_file.createVariable('LST', 'f4', ('time',))
+new_QPE = new_nc_file.createVariable('QPE', 'f4', ('time',))
+new_DSD = new_nc_file.createVariable('DSD', 'f4', ('time',))
+new_FOG = new_nc_file.createVariable('FOG', 'f4', ('time',))
+
+time_index = 0
+for folder_name in ['2021']:
+    folder_path = os.path.join(r'E:', folder_name)
+    # 遍历文件夹中的所有文件
+    for filename in os.listdir(folder_path):
+        if filename.endswith('.nc'):
+            file_path = os.path.join(folder_path, filename)
+            nc_file = Dataset(file_path, 'r')
+
+            cfr_data = nc_file.variables['CFR'][nearest_indices]
+            clt_data = nc_file.variables['CLT'][nearest_indices]
+            cth_data = nc_file.variables['CTH'][nearest_indices]
+            ctp_data = nc_file.variables['CTP'][nearest_indices]
+            ctt_data = nc_file.variables['CTT'][nearest_indices]
+            eglob_data = nc_file.variables['Eglob'][nearest_indices]
+            ebn_data = nc_file.variables['Ebn'][nearest_indices]
+            edif_data = nc_file.variables['Edif'][nearest_indices]
+            LPW_LOW_data = nc_file.variables['LPW_LOW'][nearest_indices]
+            LPW_MID_data = nc_file.variables['LPW_MID'][nearest_indices]
+            LPW_HIGH_data = nc_file.variables['LPW_HIGH'][nearest_indices]
+            LST_data = nc_file.variables['LST'][nearest_indices]
+            QPE_data = nc_file.variables['QPE'][nearest_indices]
+            DSD_data = nc_file.variables['DSD'][nearest_indices]
+            FOG_data = nc_file.variables['FOG'][nearest_indices]
+ 
+            new_time[time_index] = int(filename.split('_')[-1].split('.')[0]) 
+            new_cfr[time_index] = cfr_data
+            new_clt[time_index] = clt_data
+            new_cth[time_index] = cth_data
+            new_ctp[time_index] = ctp_data
+            new_ctt[time_index] = ctt_data
+            new_eglob[time_index] = eglob_data
+            new_ebn[time_index] = ebn_data            
+            new_edif[time_index] = edif_data           
+            new_LPW_LOW[time_index] = LPW_LOW_data
+            new_LPW_MID[time_index] = LPW_MID_data
+            new_LPW_HIGH[time_index] = LPW_HIGH_data
+            new_LST[time_index] = LST_data
+            new_QPE[time_index] = QPE_data
+            new_DSD[time_index] = DSD_data
+            new_FOG[time_index] = FOG_data
+
+            time_index += 1
+ 
+            nc_file.close()
+
+new_nc_file.close()
+
+
+file_path = r'nc'
+output_file_path = r'nc'
+
+nc_file = nc.Dataset(file_path, 'r')
+
+SWR = nc_file.variables['SWR'][:]
+latitude = nc_file.variables['latitude'][:]
+longitude = nc_file.variables['longitude'][:]
+
+nc_file.close()
+lon_indices = np.where((longitude >= 100) & (longitude <= 110))[0]
+lat_indices = np.where((latitude >= 25) & (latitude <= 35))[0]
+
+SWR_subset = SWR[lat_indices[0]:lat_indices[-1]+1, lon_indices[0]:lon_indices[-1]+1]
+print(SWR_subset.shape)
+
+new_shape = (1000, 1000)
+
+interpolator = RectBivariateSpline(np.arange(SWR_subset.shape[0]), np.arange(SWR_subset.shape[1]), SWR_subset)
+
+x_new = np.linspace(0, SWR_subset.shape[1] - 1, new_shape[1])
+y_new = np.linspace(0, SWR_subset.shape[0] - 1, new_shape[0])
+SWR_down = interpolator(y_new, x_new)
+
+
+output_nc_file = nc.Dataset(output_file_path, 'w', format='NETCDF4')
+
+
+output_nc_file.createDimension('lat', new_shape[0])
+output_nc_file.createDimension('lon', new_shape[1])
+
+output_nc_file.createDimension('lat2', 201)
+output_nc_file.createDimension('lon2', 201)
+
+SWR_down_var = output_nc_file.createVariable('SWR_down', 'f4', ('lat', 'lon'))
+SWR_down_ori = output_nc_file.createVariable('SWR_down_ori', 'f4', ('lat2', 'lon2'))
+
+SWR_down_var[:] = SWR_down
+SWR_down_ori[:] = SWR_subset
+
+output_nc_file.close()
+
+
+file_path = r'nc'
+nc_file = nc.Dataset(file_path, 'r')
+
+longitude = nc_file.variables['longitude'][:]
+latitude = nc_file.variables['latitude'][:]
+time = nc_file.variables['time'][:] 
+ssrdc = nc_file.variables['ssrdc'][:]
+ssrd = nc_file.variables['ssrd'][:]
+
+# J m^-2 to W m^-2
+ssrdc_w_m2 = ssrdc / 3600.0
+ssrd_w_m2 = ssrd / 3600.0
+
+target_lat =-75.1
+target_lon =123.383
+
+lat_index = np.abs(latitude - target_lat).argmin()
+lon_index = np.abs(longitude - target_lon).argmin()
+
+ssrd_value = ssrd_w_m2[:, lat_index, lon_index]
+ssrdc_value = ssrdc_w_m2[:, lat_index, lon_index]
+print("lat_diff:",latitude[lat_index]-target_lat)
+print("lon_diff:",longitude[lon_index]-target_lon)
+
+nc_file.close()
+
+new_file_path = r'nc'
+
+new_nc_file = nc.Dataset(new_file_path, 'w', format='NETCDF4')
+new_nc_file.createDimension('time', len(time))
+
+
+new_time = new_nc_file.createVariable('time', 'f4', ('time',))
+new_latitude = new_nc_file.createVariable('latitude', 'f4')
+new_longitude = new_nc_file.createVariable('longitude', 'f4')
+new_ssrd = new_nc_file.createVariable('SWD_RS', 'f4', ('time',))
+new_ssrdc = new_nc_file.createVariable('SWD_clearsky', 'f4', ('time',))
+
+new_time[:] = np.arange(0, len(time)+0) 
+new_latitude[:] = target_lat
+new_longitude[:] = target_lon
+new_ssrd[:] = ssrd_value
+new_ssrdc[:] = ssrdc_value
+print("newtime:",new_time[:])
+print("lentime:",len(new_time))
+
+new_nc_file.close()
+
+print("New file saved at:", new_file_path)
+
+directory = r'E:'
+output_directory = r'E:'
+
+file_groups = {}
+file_list = os.listdir(directory)
+
+for file_name in file_list:
+    if file_name.endswith('.nc'):  
+
+        match = re.match(r'((MOD|MYD)06_L2\.A\d+\.\d+\.\d+\.\d+\.pssgrpgs_\d+)\.(\w+)\.nc', file_name)
+        if match:
+            common_part = match.group(1)
+            var_name = match.group(3)
+
+            if common_part in file_groups:
+                file_groups[common_part][var_name] = file_name
+            else:
+                file_groups[common_part] = {var_name: file_name}
+
+
+for common_part, var_files in file_groups.items():
+    new_file_path = os.path.join(output_directory, f"{common_part}.nc")
+    new_nc_file = nc.Dataset(new_file_path, "w", format="NETCDF4")
+
+    var_names = list(var_files.keys())
+
+    latitudes = np.linspace(79.2,79.4, 23)
+    longitudes = np.linspace(101.7,101.9,23)
+    lat_dim = new_nc_file.createDimension("lat", size=23)
+    lon_dim = new_nc_file.createDimension("lon", size=23)
+    lat_var = new_nc_file.createVariable("lat", np.float64, ("lat",))
+    lon_var = new_nc_file.createVariable("lon", np.float64, ("lon",))
+    lat_var[:] = latitudes
+    lon_var[:] = longitudes
+
+    for var_name in var_names:
+        file_name = var_files[var_name]
+        file_path = os.path.join(directory, file_name)
+    
+        nc_file = nc.Dataset(file_path)
+        var_data = nc_file.variables[var_name][:]
+
+        nc_file.close()
+    
+        if var_name == 'Surface_Temperature':
+            #print(var_data)
+            var_data = (((var_data+14850)*100+15000) * 0.02 - 273.15)
+            #print(var_data)
+
+        if var_name == 'Cloud_Top_Temperature':
+            #print(var_data)
+            var_data = (((var_data+14850)*100+15000) * 0.02 - 273.15)
+            #print(var_data)
+
+        new_var = new_nc_file.createVariable(var_name, var_data.dtype, ("lat", "lon"))
+        new_var[:] = var_data
+
+
+
+
+def calculate_time(filename):
+
+    parts = filename.split('.')
+    date_part = parts[1][1:]  
+    day_of_year = int(date_part[4:7])  
+    hour = int(parts[2][:2]) 
+    time = (day_of_year - 1) * 24 + hour
+    return time
+
+def find_nearest_pixel(latitude, longitude, target_lat, target_lon):
+    lat_index = np.abs(latitude - target_lat).argmin()
+    lon_index = np.abs(longitude - target_lon).argmin()
+    return lat_index, lon_index
+
+folder_path = r''
+
+site_lat = 79.27
+site_lon =101.75
+
+new_file_path = r'nc'
+variables = ['Cloud_Effective_Emissivity', 'Cloud_Effective_Radius', 'Cloud_Fraction',
+             'Cloud_Phase_Optical_Properties', 'Cloud_Top_Height','Cloud_Top_Pressure',
+             'Cloud_Top_Temperature', 'Cloud_Water_Path']
+
+times = []
+processed_times = set()
+
+data = {var: [] for var in variables}
+
+for filename in os.listdir(folder_path):
+    if filename.endswith('.nc'):
+        file_path = os.path.join(folder_path, filename)
+        with Dataset(file_path, 'r') as nc_file:
+
+            missing_variables = []
+            for var in variables:
+                if var not in nc_file.variables:
+                    missing_variables.append(var)
+            if missing_variables:
+                continue
+            time = calculate_time(filename)  
+            if time in processed_times:  
+                continue
+            
+            times.append(time)
+            processed_times.add(time)
+
+            latitude = nc_file.variables['lat'][:]
+            longitude = nc_file.variables['lon'][:]
+
+            lat_index, lon_index = find_nearest_pixel(latitude, longitude, site_lat, site_lon)
+
+            for var in variables:
+                var_values = nc_file.variables[var][lat_index, lon_index]
+
+                var_values = np.where(np.isnan(var_values), -1, var_values)
+                data[var].append(var_values)
+times = sorted(times)
+
+
+with Dataset(new_file_path, 'w') as new_nc_file:
+    new_nc_file.createDimension('time', len(times))
+    
+
+    time_var = new_nc_file.createVariable('time', 'i4', ('time',))
+    time_var[:] = times
+    print(times)
+        
+    for var in variables:
+        var_data = np.ma.filled(np.array(data[var]), np.nan) 
+        var_data = np.where(var_data == np.nan, -1, var_data)  
+        var_dim = ('time',)
+
+        new_var = new_nc_file.createVariable(var, 'f4', var_dim)
+        new_var[:] = var_data
+
+modis_file = "nc"
+modis_data = nc.Dataset(modis_file, "r")
+era5_file = "nc"
+era5_data = nc.Dataset(era5_file, "r")
+bsrn_file = "nc"
+bsrn_data = nc.Dataset(bsrn_file, "r")
+new_file = "nc"
+new_data = nc.Dataset(new_file, "w")
+
+
+for dimname, dim in modis_data.dimensions.items():
+    new_data.createDimension(dimname, len(dim) if not dim.isunlimited() else None)
+
+
+for varname, var in modis_data.variables.items():
+    if varname != "time": 
+        if varname == "Cloud_Effective_Emissivity":
+            new_var = new_data.createVariable("CEE", var.datatype, var.dimensions)
+        elif varname == "Cloud_Effective_Radius":
+            new_var = new_data.createVariable("CER", var.datatype, var.dimensions)
+        elif varname == "Cloud_Fraction":
+            new_var = new_data.createVariable("CFR", var.datatype, var.dimensions)
+        elif varname == "Cloud_Phase_Optical_Properties":
+            new_var = new_data.createVariable("CPO", var.datatype, var.dimensions)
+        elif varname == "Cloud_Top_Height":
+            new_var = new_data.createVariable("CTH", var.datatype, var.dimensions)
+        elif varname == "Cloud_Top_Pressure":
+            new_var = new_data.createVariable("CTP", var.datatype, var.dimensions)            
+        elif varname == "Cloud_Top_Temperature":
+            new_var = new_data.createVariable("CTT", var.datatype, var.dimensions)
+        elif varname == "Cloud_Water_Path":
+            new_var = new_data.createVariable("CWP", var.datatype, var.dimensions)
+        elif varname == "Surface_Temperature":
+            new_var = new_data.createVariable("STE", var.datatype, var.dimensions)
+        elif varname == "Tropopause_Height":
+            new_var = new_data.createVariable("THE", var.datatype, var.dimensions)        
+        else:
+            new_var = new_data.createVariable(varname, var.datatype, var.dimensions)
+        new_var[:] = var[:]
+
+time_modis = modis_data.variables["time"][:]
+for varname, var in era5_data.variables.items():
+    if varname in ["SWD_RS", "SWD_cs"]:
+        new_var = new_data.createVariable(varname, var.datatype, ("time",))
+        time_indices = [i for i, t in enumerate(time_modis) if t in era5_data.variables["time"][:]]
+        new_var[:] = var[time_indices]
+
+for varname, var in bsrn_data.variables.items():
+    if varname == "SWD_avg":
+        new_var = new_data.createVariable(varname, var.datatype, ("time",))
+        time_indices = [i for i, t in enumerate(time_modis) if t in bsrn_data.variables["time"][:]]
+        new_var[:] = var[time_indices]
+
+
+new_time = new_data.createVariable("time", modis_data.variables["time"].datatype, ("time",))
+new_time[:] = modis_data.variables["time"][:]
+
+modis_data.close()
+era5_data.close()
+bsrn_data.close()
+new_data.close()
+
+
+class RMSELoss(nn.Module):
+    def __init__(self):
+        super(RMSELoss, self).__init__()
+        self.mse = nn.MSELoss()
+        
+    def forward(self, y_pred, y_true):
+        return torch.sqrt(self.mse(y_pred, y_true))
+
+if torch.cuda.is_available():
+    device = torch.cuda.current_device()
+    print(f"{device}")
+    print(f"{torch.cuda.get_device_name(device)}")
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"{device}")
+
+def read_nc_data0(file_path):
+    nc = Dataset(file_path, 'r')
+    CFR = nc.variables['CFR'][:]
+    CLT = nc.variables['CLT'][:]
+    CTH = nc.variables['CTH'][:]
+    CTP = nc.variables['CTP'][:]
+    CTT = nc.variables['CTT'][:]
+    Eglob = nc.variables['Eglob'][:]
+    SSI = nc.variables['SSI'][:]
+    LPW_LOW = nc.variables['LPW_LOW'][:]
+    LPW_MID = nc.variables['LPW_MID'][:]    
+    LPW_HIGH = nc.variables['LPW_HIGH'][:]    
+    LST = nc.variables['LST'][:]    
+    QPE = nc.variables['QPE'][:]    
+    DSD = nc.variables['DSD'][:]    
+    FOG = nc.variables['FOG'][:]    
+
+    nc.close()
+    
+    CTH[(CLT == 0) | (CTP == -999)] = 0
+    CTP[(CLT == 0) | (CTP == -999)] = 0
+    CTT[(CLT == 0) | (CTP == -999)] = 0    
+  
+    num=6
+    CFR = CFR.flatten()[::num]
+    CLT = CLT.flatten()[::num]
+    CTH = CTH.flatten()[::num]
+    CTP = CTP.flatten()[::num]
+    CTT = CTT.flatten()[::num]
+    Eglob = Eglob.flatten()[::num]
+    SSI = SSI.flatten()[::num]
+    LPW_LOW = LPW_LOW.flatten()[::num]   
+    LPW_MID = LPW_MID.flatten()[::num]    
+    LPW_HIGH = LPW_HIGH.flatten()[::num]    
+    LST = LST.flatten()[::num]    
+    QPE = QPE.flatten()[::num]    
+    DSD = DSD.flatten()[::num]    
+    FOG = FOG.flatten()[::num]
+
+    return CFR, CLT, CTH, CTP, CTT, Eglob, SSI,LPW_LOW, LPW_MID,LPW_HIGH,LST ,QPE,DSD,FOG
+
+
+file_paths = []
+
+X_data = []
+y_data = []
+
+for file_path in file_paths:
+    CFR, CLT, CTH, CTP, CTT, Eglob, SSI, LPW_LOW, LPW_MID, LPW_HIGH, LST, QPE, DSD, FOG = read_nc_data0(file_path)
+    combined_data = np.concatenate((
+        CFR.reshape(-1, 1), CLT.reshape(-1, 1), CTH.reshape(-1, 1), CTP.reshape(-1, 1),
+        CTT.reshape(-1, 1), Eglob.reshape(-1, 1), LPW_LOW.reshape(-1, 1), LPW_MID.reshape(-1, 1), LPW_HIGH.reshape(-1, 1),
+        LST.reshape(-1, 1), QPE.reshape(-1, 1), DSD.reshape(-1, 1), FOG.reshape(-1, 1)
+    ), axis=1)
+
+    X_data.append(combined_data)
+    #print("Shape of X_data after processing", file_path, ":", np.concatenate(X_data, axis=0).shape)
+    y_data.append(SSI.reshape(-1, 1))
+
+X = np.concatenate(X_data, axis=0)
+y = np.concatenate(y_data, axis=0)
+
+X_train, X_val, y_train, y_val = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42
+)
+
+
+X_train = torch.tensor(X_train, dtype=torch.float32).to(device)
+y_train = torch.tensor(y_train, dtype=torch.float32).to(device)
+X_val = torch.tensor(X_val, dtype=torch.float32).to(device)
+y_val = torch.tensor(y_val, dtype=torch.float32).to(device)
+
+input_dim_combined =13 
+
+output_dim = 1
+
+model = CloudAttenuationModel0(input_dim_combined, output_dim).to(device)
+
+criterion = RMSELoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=5, factor=0.5, verbose=True)
+
+
+def train_model(X_train, y_train, X_val, y_val, model, criterion, optimizer, scheduler, num_epochs=1500):
+    for epoch in range(num_epochs):
+
+        model.train()
+        optimizer.zero_grad()
+        outputs = model(X_train)
+        loss = criterion(outputs, y_train)
+        loss.backward()
+        optimizer.step()
+        
+
+        model.eval()
+        with torch.no_grad():
+            val_outputs = model(X_val)
+            val_loss = criterion(val_outputs, y_val)
+        
+        scheduler.step(val_loss)
+        
+        if (epoch+1) % 100 == 0:
+            print('Epoch [{}/{}], Train Loss: {:.4f}, Val Loss: {:.4f}'.format(epoch+1, num_epochs, loss.item(), val_loss.item()))
+
+train_model(X_train, y_train, X_val, y_val, model, criterion, optimizer, scheduler)
+
+
+##tau，a，b
+class CustomLoss(nn.Module):
+    def __init__(self):
+        super(CustomLoss, self).__init__()
+
+    def forward(self, predicted_tau, predicted_a,predicted_b,Eglob, SSI):
+        # Calculate the predicted SSI
+        predicted_SSI = Eglob * torch.exp(-predicted_tau) + predicted_a+ predicted_b
+        
+        # Compute the loss
+        loss = torch.abs(predicted_SSI - SSI)
+
+        return loss.mean()
+
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def read_nc_data(file_path):
+    nc = Dataset(file_path, 'r')
+    CFR = nc.variables['CFR'][:]
+    CLT = nc.variables['CLT'][:]
+    CTH = nc.variables['CTH'][:]
+    CTP = nc.variables['CTP'][:]
+    CTT = nc.variables['CTT'][:]
+    Eglob = nc.variables['Eglob'][:]
+    Ebn = nc.variables['Ebn'][:]
+    Edif = nc.variables['Edif'][:]
+    SSI = nc.variables['SSI'][:]
+    LPW_LOW = nc.variables['LPW_LOW'][:]
+    LPW_MID = nc.variables['LPW_MID'][:]    
+    LPW_HIGH = nc.variables['LPW_HIGH'][:]    
+    LST = nc.variables['LST'][:]    
+    QPE = nc.variables['QPE'][:]    
+    DSD = nc.variables['DSD'][:]    
+    FOG = nc.variables['FOG'][:]    
+
+    nc.close()
+    
+    CTH[(CLT == 0) | (CTP == -999)] = 0
+    CTP[(CLT == 0) | (CTP == -999)] = 0
+    CTT[(CLT == 0) | (CTP == -999)] = 0    
+
+    CFR = CFR.flatten()
+    CLT = CLT.flatten()
+    CTH = CTH.flatten()
+    CTP = CTP.flatten()
+    CTT = CTT.flatten()
+    Eglob = Eglob.flatten()
+    Ebn = Ebn.flatten()
+    Edif = Edif.flatten()
+    SSI = SSI.flatten()
+    LPW_LOW = LPW_LOW.flatten()   
+    LPW_MID = LPW_MID.flatten()   
+    LPW_HIGH = LPW_HIGH.flatten()    
+    LST = LST.flatten()  
+    QPE = QPE.flatten()  
+    DSD = DSD.flatten()   
+    FOG = FOG.flatten()
+
+
+    return CFR, CLT, CTH, CTP, CTT, Eglob,Ebn,Edif, SSI,LPW_LOW, LPW_MID,LPW_HIGH,LST ,QPE,DSD,FOG
+
+file_paths = []
+
+
+X_data = []
+y_data = []
+
+for file_path in file_paths:
+    CFR, CLT, CTH, CTP, CTT, Eglob, Ebn, Edif, SSI, LPW_LOW, LPW_MID, LPW_HIGH, LST, QPE, DSD, FOG = read_nc_data(file_path)
+    X_data.append(np.stack((CFR, CLT, CTH, CTP, CTT, Eglob, LPW_LOW, LPW_MID, LPW_HIGH, LST, QPE, DSD, FOG), axis=1))
+    y_data.append(np.stack((Eglob, SSI), axis=1))
+
+X = np.concatenate(X_data, axis=0)
+y = np.concatenate(y_data, axis=0)
+
+X_train, X_val, y_train, y_val = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42
+)
+
+X_train = torch.tensor(X_train, dtype=torch.float32).to(device)
+y_train = torch.tensor(y_train, dtype=torch.float32).to(device)
+X_val = torch.tensor(X_val, dtype=torch.float32).to(device)
+y_val = torch.tensor(y_val, dtype=torch.float32).to(device)
+
+
+input_dim_cloud = 5  
+input_dim_eglob = 1
+input_dim_other = 7
+output_dim = 2
+
+
+model = CloudAttenuationModel2(input_dim_cloud, input_dim_eglob,input_dim_other, output_dim).to(device)
+
+
+def init_weights(m):
+    if type(m) == nn.Linear:
+        torch.nn.init.xavier_uniform_(m.weight)
+        m.bias.data.fill_(0.01)
+
+
+model.apply(init_weights)
+
+
+criterion = CustomLoss()
+optimizer = optim.Adam(model.parameters(), lr=0.0001)
+
+
+scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=10, factor=0.8, verbose=True)
+
+
+def train_model(X_train, y_train, X_val, y_val, model, criterion, optimizer, scheduler, num_epochs=1500):
+    for epoch in range(num_epochs):
+
+        model.train()
+        optimizer.zero_grad()
+        output_tau,output_a = model(X_train[:, :input_dim_cloud], X_train[:, input_dim_cloud:input_dim_cloud+input_dim_eglob],
+                        X_train[:, input_dim_cloud+input_dim_eglob:input_dim_cloud+input_dim_eglob+input_dim_other])
+        
+        loss = criterion(output_tau,output_a, y_train[:, 0].unsqueeze(1),y_train[:, 1].unsqueeze(1))
+        
+        # output_tau,output_a,output_b= model(cloud_factors_train)
+        # loss = criterion(output_tau,output_a,output_b, y_train[:, 0].unsqueeze(1),y_train[:, 1].unsqueeze(1))
+        
+        loss.backward()
+        optimizer.step()
+        
+
+        model.eval()
+        with torch.no_grad():
+            val_output_tau,val_output_a = model(X_val[:, :input_dim_cloud], X_val[:, input_dim_cloud:input_dim_cloud+input_dim_eglob],
+                            X_val[:, input_dim_cloud+input_dim_eglob:input_dim_cloud+input_dim_eglob+input_dim_other])
+            
+
+            val_loss = criterion(val_output_tau,val_output_a, y_val[:, 0].unsqueeze(1),y_val[:, 1].unsqueeze(1))
+            
+            # val_output_tau,val_output_a,val_output_b = model(cloud_factors_val)
+            # val_loss = criterion(val_output_tau,val_output_a,val_output_b, y_val[:, 0].unsqueeze(1),y_val[:, 1].unsqueeze(1))  
+            
+
+        scheduler.step(val_loss)
+        
+        if (epoch+1) % 100 == 0:
+            print('Epoch [{}/{}], Train Loss: {:.4f}, Val Loss: {:.4f}'.format(epoch+1, num_epochs, loss.item(), val_loss.item()))
+
+
+class CustomLoss(nn.Module):
+    def __init__(self):
+        super(CustomLoss, self).__init__()
+
+    def forward(self, predicted_tau, predicted_a, Eglob, SSI):        
+        zero_mask = Eglob == 0
+        predicted_SSI = torch.zeros_like(Eglob)
+        predicted_SSI[~zero_mask] = Eglob[~zero_mask] * torch.exp(-predicted_tau[~zero_mask]) + predicted_a[~zero_mask]
+        loss = torch.abs(predicted_SSI - SSI)
+
+        return loss.mean()
+
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f": {device}")
+
+def read_nc_data(file_path):
+    nc = Dataset(file_path, 'r')
+    CEE = nc.variables['CEE'][:]
+    CER = nc.variables['CER'][:]
+    CFR = nc.variables['CFR'][:]
+    CPO = nc.variables['CPO'][:]
+    CTH = nc.variables['CTH'][:]
+    CTP = nc.variables['CTP'][:]
+    CTT = nc.variables['CTT'][:]
+    CWP = nc.variables['CWP'][:]
+    STE = nc.variables['STE'][:]
+    THE = nc.variables['THE'][:]
+    
+    Eglob = nc.variables['SWD_cs'][:]
+    SSI = nc.variables['SWD_avg'][:]
+    SSI_RS = nc.variables['SWD_RS'][:]
+    
+    CEE = CEE.flatten()
+    CER = CER.flatten()    
+    CFR = CFR.flatten()
+    CPO = CPO.flatten()
+    CTH = CTH.flatten()
+    CTP = CTP.flatten()
+    CTT = CTT.flatten()
+    CWP = CWP.flatten()
+    Eglob = Eglob.flatten()
+    SSI = SSI.flatten()
+    SSI_RS = SSI_RS.flatten()
+    nc.close()
+
+    
+    return CEE,CER,CFR, CPO, CTH, CTP, CTT, CWP,STE,THE,Eglob, SSI,SSI_RS
+
+
+file_paths = ['nc']
+
+X_data = []
+y_data = []
+
+for file_path in file_paths:
+    CEE,CER,CFR, CPO, CTH, CTP, CTT, CWP,STE,THE,Eglob, SSI,SSI_RS= read_nc_data(file_path)
+    combined_data = np.concatenate((
+        CEE.reshape(-1, 1),CER.reshape(-1, 1),CFR.reshape(-1, 1), CPO.reshape(-1, 1), CTH.reshape(-1, 1), CTP.reshape(-1, 1),CTT.reshape(-1, 1), CWP.reshape(-1, 1), 
+        Eglob.reshape(-1, 1)
+        ), axis=1)
+    X_data.append(combined_data)
+    combined_datay = np.concatenate((Eglob.reshape(-1, 1),SSI.reshape(-1, 1)), axis=1)    
+    y_data.append(combined_datay)
+
+
+X = np.concatenate(X_data, axis=0)
+y = np.concatenate(y_data, axis=0)
+
+
+X_train, X_val, y_train, y_val = train_test_split(
+    X,
+    y,
+    test_size=0.24,
+    random_state=42
+)
+
+X_train = torch.tensor(X_train, dtype=torch.float32).to(device)
+y_train = torch.tensor(y_train, dtype=torch.float32).to(device)
+X_val = torch.tensor(X_val, dtype=torch.float32).to(device)
+y_val = torch.tensor(y_val, dtype=torch.float32).to(device)
+
+input_dim_cloud = 9
+output_dim = 1
+model = CloudAttenuationModel2(input_dim_cloud,output_dim).to(device)
+
+
+def init_weights(m):
+    if type(m) == nn.Linear:
+        torch.nn.init.xavier_uniform_(m.weight)
+        m.bias.data.fill_(1)
+
+
+model.apply(init_weights)
+
+
+criterion = CustomLoss()
+optimizer = optim.Adam(model.parameters(), lr=0.003)
+
+
+scheduler = lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', patience=5, factor=0.8, verbose=True)
+
+def calculate_metrics(predicted_tau, predicted_a, Eglob, SSI, save_path=r'result'):
+    zero_mask = (Eglob == 0)
+    predicted_SSI = torch.where(zero_mask, torch.tensor(0.0), Eglob * torch.exp(-predicted_tau) + predicted_a)
+    predicted_SSI = torch.where(predicted_SSI < 0, torch.tensor(0.0), predicted_SSI)
+    rmse = torch.sqrt(torch.mean((predicted_SSI - SSI) ** 2))
+    mbe = torch.mean(predicted_SSI - SSI)
+    r_squared = 1 - torch.sum((SSI - predicted_SSI)**2) / torch.sum((SSI - torch.mean(SSI))**2)
+          
+    return rmse.item(),  mbe.item(), r_squared.item()
+
+batch_size = 128
+
+train_loader = torch.utils.data.DataLoader(
+    torch.utils.data.TensorDataset(X_train, y_train),
+    batch_size=batch_size,
+    shuffle=True
+)
+val_loader = torch.utils.data.DataLoader(
+    torch.utils.data.TensorDataset(X_val, y_val),
+    batch_size=batch_size,
+    shuffle=False
+)
+
+
+def train_model(train_loader, val_loader, model, criterion, optimizer, scheduler, num_epochs=120):
+    train_losses = []
+    val_losses = []
+    for epoch in range(num_epochs):
+        model.train()
+        train_loss = 0.0
+        for inputs, targets in train_loader:
+            optimizer.zero_grad()
+            output_tau, output_a = model(inputs)
+            loss = criterion(output_tau, output_a, targets[:, 0].unsqueeze(1), targets[:, 1].unsqueeze(1))
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.item() * inputs.size(0)
+        
+        train_loss /= len(train_loader.dataset)
+        train_losses.append(train_loss)
+        
+        model.eval()
+        val_loss = 0.0
+        with torch.no_grad():
+            for inputs, targets in val_loader:
+                val_output_tau, val_output_a = model(inputs)
+                loss = criterion(val_output_tau, val_output_a, targets[:, 0].unsqueeze(1), targets[:, 1].unsqueeze(1))
+                val_loss += loss.item() * inputs.size(0)
+        
+        val_loss /= len(val_loader.dataset)
+        val_losses.append(val_loss)
+        
+        scheduler.step(val_loss)
+        
+        if (epoch+1) % 10 == 0:
+            print('Epoch [{}/{}], Train Loss: {:.4f}, Val Loss: {:.4f}'.format(epoch+1, num_epochs, train_loss, val_loss))
+    
+    model.eval()  
+    with torch.no_grad():
+        output_tau, output_a = model(X_train)
+        val_output_tau, val_output_a = model(X_val)
+    train_rmse,  train_mbe, train_r_squared = calculate_metrics(output_tau, output_a, y_train[:, 0].unsqueeze(1), y_train[:, 1].unsqueeze(1))
+    val_rmse, val_mbe, val_r_squared = calculate_metrics(val_output_tau, val_output_a, y_val[:, 0].unsqueeze(1), y_val[:, 1].unsqueeze(1))
+    
+    print("--------------------------------")
+    print("Train RMSE: {:.4f}, MBE: {:.4f}, R^2: {:.4f}".format(train_rmse, train_mbe, train_r_squared))
+    print("Validation RMSE: {:.4f}, MBE: {:.4f}, R^2: {:.4f}".format(val_rmse, val_mbe, val_r_squared))
+    print("--------------------------------")
+
+train_model(train_loader, val_loader, model, criterion, optimizer, scheduler)
+
+
+def calculate_r_squared(predicted_SSI, true_SSI):
+
+    mean_true_SSI = np.mean(true_SSI)
+    total_sum_of_squares = np.sum((true_SSI - mean_true_SSI) ** 2)
+    residual_sum_of_squares = np.sum((true_SSI - predicted_SSI) ** 2)
+    r_squared = 1 - (residual_sum_of_squares / total_sum_of_squares)
+    
+    return r_squared
+
+def calculate_rmse(predicted_SSI, true_SSI):
+
+    diff = predicted_SSI - true_SSI
+    squared_diff = diff ** 2
+    mean_squared_diff = np.mean(squared_diff)
+    rmse = np.sqrt(mean_squared_diff)
+    
+    return rmse
+
+output_file_path = r'xlsx'
+df_filtered = pd.read_excel(output_file_path)
+
+plt.figure(figsize=(18, 6)) 
+
+plt.plot(df_filtered['time'], df_filtered['SSI'], label='BSRN', linewidth=0.5, color='red')  
+plt.plot(df_filtered['time'], df_filtered['PCDNN'], label='PC-DNN', linewidth=0.5, color='orange') 
+plt.plot(df_filtered['time'], df_filtered['DNN'], label='DNN', linewidth=0.5, color='blue') 
+plt.plot(df_filtered['time'], df_filtered['SSI_RS'], label='ERA5', linewidth=0.5, color='green')  
+
+plt.xlabel('Day')
+plt.ylabel('SWDR(W/m²)')
+plt.legend()
+plt.savefig(r'png', dpi=500) 
+plt.show()
+
+r_squared_PCDNN = calculate_r_squared(df_filtered['PCDNN'], df_filtered['SSI'])
+rmse_PCDNN = calculate_rmse(df_filtered['PCDNN'], df_filtered['SSI'])
+
+print("R-squared for PCDNN:", r_squared_PCDNN)
+print("RMSE for PCDNN:", rmse_PCDNN)
+
+r_squared_ERA5 = calculate_r_squared(df_filtered['SSI_RS'], df_filtered['SSI'])
+rmse_ERA5 = calculate_rmse(df_filtered['SSI_RS'], df_filtered['SSI'])
+
+print("R-squared for ERA5:", r_squared_ERA5)
+print("RMSE for ERA5:", rmse_ERA5)
+
+
+model.eval()
+with torch.no_grad():
+    output = model(X_train)
+
+predicted_SSI = output.cpu().numpy()
+y_all_numpy = y_train.cpu().numpy()
+
+absolute_difference = np.abs(predicted_SSI - y_all_numpy)
+
+relative_difference = absolute_difference / y_all_numpy
+
+relative_difference_percent = relative_difference 
+
+feature_importance = {}
+feature_importance_nor= {}
+
+feature_names = ['CEE', 'CER', 'CFR', 'CPP', 'CTH', 'CTP', 'CTT', 'CWP', 'CSWDR']
+
+
+for i in range(X_train.shape[1]):
+
+    shuffled_data = X_train.clone()
+    shuffled_data[:, i] = torch.randperm(shuffled_data.shape[0])
+    
+    with torch.no_grad():
+        shuffled_output = model(shuffled_data)
+    
+
+    shuffled_output_numpy = shuffled_output.cpu().numpy()
+    
+
+    shuffled_difference = np.abs(shuffled_output_numpy - y_all_numpy)
+    shuffled_relative_difference = shuffled_difference / y_all_numpy
+    shuffled_relative_difference_percent = shuffled_relative_difference 
+
+    importance_diff = relative_difference_percent - shuffled_relative_difference_percent
+    feature_importance[i] = np.mean(np.abs(importance_diff), axis=0)
+    feature_importance_nor[i]=feature_importance[i]/1000
+
+#feature_importance_nor = (feature_importance - min_value) / (max_value - min_value)
+
+sorted_feature_importance = sorted(feature_importance_nor.items(), key=lambda x: x[1], reverse=True)
+
+
+sorted_feature_importance_names = [feature_names[idx] for idx, _ in sorted_feature_importance]
+sorted_feature_importance_values = [importance for _, importance in sorted_feature_importance]
+
+sorted_feature_importance_names = [str(name) for name in sorted_feature_importance_names]
+sorted_feature_importance_values = [float(value[0]) for value in sorted_feature_importance_values]
+
+
+plt.figure(figsize=(10, 6))
+plt.bar(sorted_feature_importance_names, sorted_feature_importance_values, color='skyblue')
+plt.xlabel('Feature', fontsize=14)
+plt.ylabel('Importance', fontsize=14)
+#plt.title('Feature Importance', fontsize=16)
+plt.xticks(rotation=45, ha='right')
+plt.tight_layout()
+
+plt.savefig(r'png', dpi=500)
+plt.show()
+
+def calculate_mbe(predicted_SSI, true_SSI):
+    diff = predicted_SSI - true_SSI
+    mbe = np.mean(diff)
+    return mbe
+
+file_path = r'xlsx' 
+df = pd.read_excel(file_path)
+
+H9SWDR = df['H9-SWDR']
+PCDNNSWDR = df['PCDNN-SWDR']
+ax=df['ax']
+
+rmse = calculate_rmse(H9SWDR, PCDNNSWDR)
+r_squared = calculate_r_squared(H9SWDR, PCDNNSWDR)
+mbe = calculate_mbe(H9SWDR, PCDNNSWDR)
+plt.figure(figsize=(10, 10))
+plt.scatter(H9SWDR, PCDNNSWDR, color='dodgerblue', alpha=0.2, marker='o', s=30)
+plt.plot(ax, ax, color='red', linewidth=2,)
+
+plt.xlabel('Himawari-9 SWDR(W/m²)', fontsize=24)
+plt.ylabel('PC-DNN SWDR(W/m²)', fontsize=24)
+#plt.title('PC-DNN', fontsize=24)
+
+plt.xlim(0, 650) 
+plt.ylim(0, 650) 
+plt.xticks(fontsize=15)  
+plt.yticks(fontsize=15)  
+plt.text(0.05, 0.95, f'RMSE: {rmse:.4f}\nMBE: {mbe:.4f}\nR^2: {r_squared:.4f}',
+              verticalalignment='top', horizontalalignment='left', transform=plt.gca().transAxes, fontsize=24)
+plt.legend()
+save_path = r'png' 
+plt.savefig(save_path, dpi=700)
+plt.show()
+    
+
+file_path = r'xlsx'  
+df = pd.read_excel(file_path)
+
+H9SWDR = df['H9-SWDR']
+PCDNNSWDR = df['PCDNN-SWDR']
+rmse = calculate_rmse(H9SWDR, PCDNNSWDR)
+r_squared = calculate_r_squared(H9SWDR, PCDNNSWDR)
+mbe = calculate_mbe(H9SWDR, PCDNNSWDR)
+plt.figure(figsize=(10, 10))
+plt.scatter(H9SWDR, PCDNNSWDR, color='dodgerblue', alpha=0.2, marker='o', s=30)
+plt.plot(ax, ax, color='red', linewidth=2,)
+
+plt.xlabel('Himawari-9 SWDR(W/m²)', fontsize=24)
+plt.ylabel('PC-DNN SWDR(W/m²)', fontsize=24)
+#plt.title('PC-DNN', fontsize=24)
+
+plt.xlim(0, 700)  
+plt.ylim(0, 700) 
+plt.xticks(fontsize=15)  
+plt.yticks(fontsize=15)  
+
+plt.text(0.05, 0.95, f'RMSE: {rmse:.4f}\nMBE: {mbe:.4f}\nR^2: {r_squared:.4f}',
+              verticalalignment='top', horizontalalignment='left', transform=plt.gca().transAxes, fontsize=24)
+    
+plt.legend()
+save_path = r'png'  
+plt.savefig(save_path, dpi=700)
+plt.show()
+    
