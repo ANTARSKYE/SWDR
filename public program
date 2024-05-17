@@ -691,9 +691,8 @@ class CustomLoss(nn.Module):
         super(CustomLoss, self).__init__()
 
     def forward(self, predicted_tau, predicted_a, Eglob, SSI):        
-        zero_mask = Eglob == 0
-        predicted_SSI = torch.zeros_like(Eglob)
-        predicted_SSI[~zero_mask] = Eglob[~zero_mask] * torch.exp(-predicted_tau[~zero_mask]) + predicted_a[~zero_mask]
+
+        predicted_SSI = Eglob * torch.exp(-predicted_tau) + predicted_a
         loss = torch.abs(predicted_SSI - SSI)
 
         return loss.mean()
